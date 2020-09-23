@@ -1,3 +1,5 @@
+TODO: Add password to .env file in glitch
+verify html files
 Assignment 3 - Persistence: Two-tier Web Application with Database, Express server, and CSS template
 
 Due: September 28th, by 11:59 PM.

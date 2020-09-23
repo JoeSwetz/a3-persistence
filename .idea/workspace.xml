@@ -2,8 +2,10 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="6d51bfc6-7107-4f11-ab1e-03eb79ea192b" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/public/js/scripts.js" beforeDir="false" afterPath="$PROJECT_DIR$/public/js/scripts.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/server.js" beforeDir="false" afterPath="$PROJECT_DIR$/server.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -28,6 +30,11 @@
     <property name="nodejs_package_manager_path" value="npm" />
     <property name="vue.rearranger.settings.migration" value="true" />
   </component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="D:\CS4241\a3-persistence\" />
+    </key>
+  </component>
   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
@@ -39,7 +46,8 @@
       <workItem from="1600492197160" duration="1975000" />
       <workItem from="1600649507529" duration="9245000" />
       <workItem from="1600718483001" duration="11841000" />
-      <workItem from="1600810112170" duration="15310000" />
+      <workItem from="1600810112170" duration="15351000" />
+      <workItem from="1600879130828" duration="9078000" />
     </task>
     <task id="LOCAL-00001" summary="Made server.improved.js into an Express server">
       <created>1600494176830</created>
@@ -55,7 +63,14 @@
       <option name="project" value="LOCAL" />
       <updated>1600733530674</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="Front-end now updates with add, modify and delete">
+      <created>1600827808041</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1600827808041</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -64,17 +79,22 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Made server.improved.js into an Express server" />
     <MESSAGE value="Rewrote server.js to use MongoDB" />
-    <option name="LAST_COMMIT_MESSAGE" value="Rewrote server.js to use MongoDB" />
+    <MESSAGE value="Front-end now updates with add, modify and delete" />
+    <option name="LAST_COMMIT_MESSAGE" value="Front-end now updates with add, modify and delete" />
   </component>
   <component name="WindowStateProjectService">
-    <state x="393" y="0" key="CommitChangelistDialog2" timestamp="1600733529499">
+    <state x="158" y="217" key="#com.intellij.fileTypes.FileTypeChooser" timestamp="1600883606169">
       <screen x="0" y="0" width="1536" height="824" />
     </state>
-    <state x="393" y="0" key="CommitChangelistDialog2/0.0.1536.824@0.0.1536.824" timestamp="1600733529499" />
-    <state x="361" y="145" key="Vcs.Push.Dialog.v2" timestamp="1600733536028">
+    <state x="158" y="217" key="#com.intellij.fileTypes.FileTypeChooser/0.0.1536.824@0.0.1536.824" timestamp="1600883606169" />
+    <state x="393" y="0" key="CommitChangelistDialog2" timestamp="1600827807077">
       <screen x="0" y="0" width="1536" height="824" />
     </state>
-    <state x="361" y="145" key="Vcs.Push.Dialog.v2/0.0.1536.824@0.0.1536.824" timestamp="1600733536028" />
+    <state x="393" y="0" key="CommitChangelistDialog2/0.0.1536.824@0.0.1536.824" timestamp="1600827807077" />
+    <state x="361" y="145" key="Vcs.Push.Dialog.v2" timestamp="1600827813980">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state x="361" y="145" key="Vcs.Push.Dialog.v2/0.0.1536.824@0.0.1536.824" timestamp="1600827813980" />
     <state x="425" y="187" key="run.anything.popup" timestamp="1600732640280">
       <screen x="0" y="0" width="1536" height="824" />
     </state>

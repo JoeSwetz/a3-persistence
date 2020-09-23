@@ -2,16 +2,10 @@ const fs   = require("fs"),
       express = require("express"),
       app = express(),
       bodyParser = require("body-parser"),
-      port = 3000;
+      port = process.env.PORT || 3000;
 
-const MongoClient = require('mongodb').MongoClient;
-const uri = "mongodb+srv://joe_swetz:ginger0304@cs4241-a3.catjb.gcp.mongodb.net/CS4241?retryWrites=true&w=majority";
-const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
-client.connect(err => {
-    if(err){
-        console.log("error connecting to database: " +err);
-    }
-});
+//Load DB username and password
+require("dotenv").config();
 
 app.listen(port);
 app.use(express.static("./public"));
@@ -30,6 +24,16 @@ let totalDeaths = 0;
 let avgKills = 0;
 let avgAssists = 0;
 let avgDeaths = 0;
+
+let serverReady = false;
+const MongoClient = require('mongodb').MongoClient;
+const uri = `mongodb+srv://${process.env.name}:${process.env.password}@cs4241-a3.catjb.gcp.mongodb.net/CS4241?retryWrites=true&w=majority`;
+const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
+client.connect(function(error){
+    if(error){
+        console.log("error connecting to database: " +error);
+    }
+});
 
 /////////////////// Additional Middleware /////////////////////////////
 /**
@@ -79,6 +83,7 @@ const addItem = function(request, response){
             return false;
     }
 
+    //Calculated derived fields
     let ratios = calculateKDandAD(request.body.kills, request.body.assists, request.body.deaths);
     let obj = {
         "_id": id,
@@ -90,15 +95,18 @@ const addItem = function(request, response){
     };
 
     id++;
-    update(1, request.body.kills, request.body.assists, request.body.deaths);
-
-    let collection = client.db("FPS_Stats").collection("game_stats");
-    collection.insertOne(obj, {}, function(error, result){
-        if(error){
-            console.log("error occurred adding item: " +error);
-            return;
-        }
-        sendTable(response);
+    //update(1, obj.kills, obj.assists, obj.deaths);
+    updateAll(obj.kills, obj.assists, obj.deaths, 1).then(function(result){
+        //At this point, all totals and averages have now been updated. Now
+        //add the row of game stats to the table.
+        let collection = client.db("FPS_Stats").collection("game_stats");
+        collection.insertOne(obj, {}, function(error, result){
+            if(error){
+                console.log("error occurred adding item: " +error);
+                return;
+            }
+            sendTable(response);
+        });
     });
 }
 app.post("/add", [bodyParser.json(), convertDataToNum], addItem);
@@ -124,10 +132,6 @@ const modifyItem = function(request, response){
             return;
         }
 
-        totalKills -= result.kills;
-        totalAssists -= result.assists;
-        totalDeaths -= result.deaths;
-
         let updateData = {
             kills: result.kills,
             assists: result.assists,
@@ -147,14 +151,17 @@ const modifyItem = function(request, response){
         updateData.kd_ratio = ratios.kd_ratio;
         updateData.ad_ratio = ratios.ad_ratio;
 
-        update(0, updateData.kills, updateData.assists, updateData.deaths);
-
-        game_stats.updateOne({_id: request.body.id}, {$set: updateData}, function(error, result){
-            if(error){
-                console.log("Error occurred modifying item: " +error);
-            }else{
-                sendTable(response);
-            }
+        //Update local and remote copies of running stats
+        updateAll(-result.kills, -result.assists, -result.deaths, 0).then(function(result){
+            updateAll(updateData.kills, updateData.assists, updateData.deaths, 0).then(function(result) {
+                game_stats.updateOne({_id: request.body.id}, {$set: updateData}, function (error, result) {
+                    if (error) {
+                        console.log("Error occurred modifying item: " + error);
+                    } else {
+                        sendTable(response);
+                    }
+                });
+            });
         });
     });
 }
@@ -180,17 +187,19 @@ const deleteItem = function(request, response){
             return;
         }
 
-        update(-1, -result.kills, -result.assists, -result.deaths, response);
-
-        //Once we have successfully found the item to delete, update totals and averages,
-        //and THEN it's safe to delete.
-        game_stats.deleteOne({_id: request.body.id}, function (error, result) {
-            if (error) {
-                console.log("Error occurred during deletion: " + error);
-            }else{
-                sendTable(response);
-            }
-        });
+        //Update running stats
+        updateAll(-result.kills, -result.assists, -result.deaths, -1)
+            .then(function(result){
+                //Once we have successfully found the item to delete, update totals and averages,
+                //THEN it's safe to delete.
+                game_stats.deleteOne({_id: request.body.id}, function (error, result) {
+                    if (error) {
+                        console.log("Error occurred during deletion: " + error);
+                    }else{
+                        sendTable(response);
+                    }
+                });
+            });
     });
 }
 app.post("/delete", [bodyParser.json(), convertDataToNum], deleteItem);
@@ -208,17 +217,19 @@ app.post("/delete", [bodyParser.json(), convertDataToNum], deleteItem);
  * {
  *     numRows: ,
  *     rows: [
- *         { "id": , "kills": , "assists": , "deaths": , "kd_ratio": , "ad_ratio": },
+ *         { "_id": , "kills": , "assists": , "deaths": , "kd_ratio": , "ad_ratio": },
  *         ...
- *         { "id": , "kills": , "assists": , "deaths": , "kd_ratio": , "ad_ratio": },
+ *         { "_id": , "kills": , "assists": , "deaths": , "kd_ratio": , "ad_ratio": },
  *     ],
- *     totals_avgs: {
- *         total_kills:
- *         avg_kills:
- *         total_assists:
- *         avg_assists:
- *         total_deaths:
- *         avg_deaths:
+ *     totals: {
+ *         kills:
+ *         assists:
+ *         deaths:
+ *     }
+ *     avgs:{
+ *         kills:
+ *         assists:
+ *         deaths:
  *     }
  * }
  *
@@ -228,23 +239,27 @@ app.post("/delete", [bodyParser.json(), convertDataToNum], deleteItem);
  */
 const sendTable = function(response){
     let json = {
-        "numRows": numEntries,
+        "numRows": 0,
         "rows": [],
         "totals": [],
         "avgs": [],
     }
-    getAllStats().then(function(result){
-            console.log("result: " +result);
-            json["rows"] = result;
+    let promises = [];
+    promises.push(getGameStats());
+    promises.push(getTotals());
+    promises.push(getAvgs());
+    Promise.all(promises).then(function(result){
+            json["rows"] = result[0];
             json["totals"] = {
-                kills: totalKills,
-                assists: totalAssists,
-                deaths: totalDeaths
+                kills: result[1][0].amount,
+                assists: result[1][1].amount,
+                deaths: result[1][2].amount,
             }
+            json["numRows"] = result[1][3].amount;
             json["avgs"] = {
-                kills: avgKills,
-                assists: avgAssists,
-                deaths: avgDeaths
+                kills: result[2][0].amount,
+                assists: result[2][1].amount,
+                deaths: result[2][2].amount
             }
             response.json(json);
     });
@@ -252,11 +267,6 @@ const sendTable = function(response){
 app.get('/results', function(request, response){
     sendTable(response);
 });
-
-const getAllStats = function(){
-    let game_stats = client.db("FPS_Stats").collection("game_stats");
-    return game_stats.find({}).toArray();
-}
 
 /**
  * Creates an HTTP response that contains the contents of a stats.csv file,
@@ -267,29 +277,32 @@ const getAllStats = function(){
  * @param response an HTTP response that will be populated the data for stats.csv.
  */
 const sendCSV = function(response){
-    /*
-     * The following link from node.js documentation taught how to
-     * close and flush write streams: https://nodejs.org/api/stream.html
-     */
-    let file = fs.createWriteStream("./stats.csv");
-    file.write(",Total,Average\n");
-    file.write(`Kills,${totalKills},${avgKills}\n`);
-    file.write(`Assists,${totalAssists},${avgAssists}\n`);
-    file.write(`Deaths,${totalDeaths},${avgDeaths}\n\n`);
+    getAllStats().then(function(results){
+        /*
+         * The following link from node.js documentation taught how to
+         * close and flush write streams: https://nodejs.org/api/stream.html
+         */
+        let file = fs.createWriteStream("./stats.csv");
+        file.write(",Total,Average\n");
+        file.write(`Kills,${results[1][0].amount},${results[2][0].amount}\n`);
+        file.write(`Assists,${results[1][1].amount},${results[2][1].amount}\n`);
+        file.write(`Deaths,${results[1][2].amount},${results[2][2].amount}\n\n`);
 
-    file.write("ID #,Kills,Assists,Deaths,K/D Ratio,A/D Ratio\n");
-    for(let i = 0; i < numEntries; i++){
-        file.write(`${appdata[i]["id"]}, ${appdata[i]["kills"]}, ${appdata[i]["assists"]}, ${appdata[i]["deaths"]}, ${appdata[i]["kd_ratio"]}, ${appdata[i]["ad_ratio"]}\n`);
-    }
-    file.on("finish", function(){
-        //Whole file has now been written, so send.
-        response.sendFile("./stats.csv", {root: "./" }, function(error){
-            if(error){
-                console.log("Error occurred sending file: " +error);
-            }
+        file.write("ID #,Kills,Assists,Deaths,K/D Ratio,A/D Ratio\n");
+        let rows = results[0];
+        for (let i = 0; i < numEntries; i++) {
+            file.write(`${rows[i]._id}, ${rows[i].kills}, ${rows[i].assists}, ${rows[i].deaths}, ${rows[i].kd_ratio}, ${rows[i].ad_ratio}\n`);
+        }
+        file.on("finish", function () {
+            //Whole file has now been written, so send.
+            response.sendFile("./stats.csv", {root: "./"}, function (error) {
+                if (error) {
+                    console.log("Error occurred sending file: " + error);
+                }
+            });
         });
+        file.end();
     });
-    file.end();
 }
 app.get('/csv', function(request, response){
     sendCSV(response);
@@ -311,7 +324,9 @@ const clearStats = function(response){
     }
 
     id = 1;
-    numEntries = 0;
+    //numEntries = 0;
+    //totalKills = totalAssists = totalDeaths = 0;
+    //avgKills = avgAssists = avgDeaths = 0;
 
     //Set all running stats back to zero
     let total = client.db("FPS_Stats").collection("totals");
@@ -322,8 +337,13 @@ const clearStats = function(response){
 
     //Clear the entire game_stats collection
     let game_stats = client.db("FPS_Stats").collection("game_stats");
-    game_stats.deleteMany({}, handleClear);
-    sendTable(response);
+    game_stats.deleteMany({}, function(error, result){
+        if(error){
+            console.log("Error occurring whe clearing game stats: " +error);
+        }else{
+            sendTable(response);
+        }
+    });
 }
 app.get('/clear', function(request, response){
     clearStats(response);
@@ -364,11 +384,9 @@ const calculateKDandAD = function(kills, assists, deaths){
  * @param kills number of kills from the game
  * @param assists number of assists from the game
  * @param deaths number of deaths from the game
- */
+
 const updateTotals = function(kills, assists, deaths){
-    console.log("kills: " +kills);
     totalKills += kills;
-    console.log("totalKills: " + totalKills);
     totalAssists += assists;
     totalDeaths += deaths;
     let totals = client.db("FPS_Stats").collection("totals");
@@ -377,12 +395,11 @@ const updateTotals = function(kills, assists, deaths){
     promises.push(totals.updateOne({type: "assists"}, {$inc: {amount: assists}}, {}));
     promises.push(totals.updateOne({type: "deaths"}, {$inc: {amount: deaths}}, {}));
     return Promise.all(promises);
-}
+}*/
 
 /**
  * Update the average kills, assists and deaths based on the current number
  * of kills, assists and deaths.
- */
 const updateAvgs = function() {
     if(numEntries <= 0){
         numEntries = 0;
@@ -396,12 +413,13 @@ const updateAvgs = function() {
     }
     let avgs = client.db("FPS_Stats").collection("averages");
     let promises = [];
-    promises.push(avgs.updateOne({type: "kills"}, {$inc: {amount: avgKills}}, {}));
-    promises.push(avgs.updateOne({type: "assists"}, {$inc: {amount: avgAssists}}, {}));
-    promises.push(avgs.updateOne({type: "deaths"}, {$inc: {amount: avgDeaths}}, {}));
+    promises.push(avgs.updateOne({type: "kills"}, {$set: {amount: avgKills}}, {}));
+    promises.push(avgs.updateOne({type: "assists"}, {$set: {amount: avgAssists}}, {}));
+    promises.push(avgs.updateOne({type: "deaths"}, {$set: {amount: avgDeaths}}, {}));
     return Promise.all(promises);
-}
+}*/
 
+/*
 const updateNumEntries = function(delta){
     numEntries += delta;
     let totals = client.db("FPS_Stats").collection("totals");
@@ -412,4 +430,89 @@ const update = function(entriesDelta, kills, assists, deaths){
     updateNumEntries(entriesDelta);
     updateTotals(kills, assists, deaths);
     updateAvgs();
+}*/
+
+const updateAll = function(killDelta, assistDelta, deathDelta, entryDelta){
+    return new Promise(function(resolve, reject) {
+        let promises = [];
+        promises.push(getTotals());
+        promises.push(getAvgs());
+        Promise.all(promises)
+            .then(function (results) {
+                //At this point, all totals and averages have been retrieved
+                //from the database. Now calculate new stats
+                let totalKills = results[0][0].amount + killDelta;
+                let totalAssists = results[0][1].amount + assistDelta;
+                let totalDeaths = results[0][2].amount + deathDelta;
+                let totalEntries = results[0][3].amount + entryDelta;
+
+                let promises = [];
+                promises.push(setTotals(totalKills, totalAssists, totalDeaths, totalEntries));
+                promises.push(setAvgs(totalKills, totalAssists, totalDeaths, totalEntries));
+                Promise.all(promises)
+                    .then(function (results) {
+                        //At this point, all totals and averages have been updated.
+                        resolve(true);
+                    })
+                    .catch(function(error){
+                        console.log("Error occurred updating totals and averages: " +error);
+                        reject(error);
+                    });
+            }).catch(function(error){
+                console.log("Error occurred getting totals and averages: " +error);
+                reject(error);
+        });
+    });
+}
+
+const getAllStats = function(){
+    let promises = [];
+    promises.push(getGameStats());
+    promises.push(getTotals());
+    promises.push(getAvgs());
+    return Promise.all(promises);
+}
+
+const getGameStats = function(){
+    let game_stats = client.db("FPS_Stats").collection("game_stats");
+    return game_stats.find({}).toArray();
+}
+
+const getTotals = function(){
+    let totals = client.db("FPS_Stats").collection("totals");
+    return totals.find({}).toArray();
+}
+
+const getAvgs = function(){
+    let avgs = client.db("FPS_Stats").collection("averages");
+    return avgs.find({}).toArray();
+}
+
+const setTotals = function(totalKills, totalAssists, totalDeaths, totalEntries){
+    let totals = client.db("FPS_Stats").collection("totals");
+    let promises = [];
+    promises.push(totals.updateOne({type: "kills"}, {$set: {amount: totalKills}}));
+    promises.push(totals.updateOne({type: "assists"}, {$set: {amount: totalAssists}}));
+    promises.push(totals.updateOne({type: "deaths"}, {$set: {amount: totalDeaths}}));
+    promises.push(totals.updateOne({type: "entries"}, {$set: {amount: totalEntries}}));
+    return Promise.all(promises);
+}
+
+const setAvgs = function(totalKills, totalAssists, totalDeaths, totalEntries){
+    console.log("totalEntries: " +totalEntries);
+    let avgKills = 0;
+    let avgAssists = 0;
+    let avgDeaths = 0;
+    if(totalEntries > 0){
+        avgKills = parseFloat((totalKills / totalEntries).toFixed(DECIMAL_PRECISION));
+        avgAssists = parseFloat((totalAssists / totalEntries).toFixed(DECIMAL_PRECISION));
+        avgDeaths = parseFloat((totalDeaths / totalEntries).toFixed(DECIMAL_PRECISION));
+    }
+    console.log("avgAssists: " +avgAssists);
+    let avgs = client.db("FPS_Stats").collection("averages");
+    let promises = [];
+    promises.push(avgs.updateOne({type: "kills"}, {$set: {amount: avgKills}}));
+    promises.push(avgs.updateOne({type: "assists"}, {$set: {amount: avgAssists}}));
+    promises.push(avgs.updateOne({type: "deaths"}, {$set: {amount: avgDeaths}}));
+    return Promise.all(promises);
 }
