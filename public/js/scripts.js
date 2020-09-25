@@ -108,6 +108,21 @@ function handle_clear(){
     return false;
 }
 
+function handle_login(){
+    fetch( '/auth/github/callback', {
+        method:'GET',
+        headers: {"Content-Type": "application/json"},
+    }).then(response => response.json())
+        .then(function( response ) {
+        console.log(response.status);
+        //  window.location = response.headers["location"];
+        console.log("login response success");
+        return true;
+    });
+
+    return false;
+}
+
 /**
  * Send a /results API HTTP request to retrieve all the current
  * stats stored in the server. The updated stats are then displayed

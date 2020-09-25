@@ -2,10 +2,39 @@ const fs   = require("fs"),
       express = require("express"),
       app = express(),
       bodyParser = require("body-parser"),
+      passport = require("passport"),
+      cors = require("cors"),
       port = 3000;
 
+require("dotenv").config();
+app.use(cors());
+let GitHubStrategy = require('passport-github').Strategy;
+passport.use(new GitHubStrategy({
+        clientID: process.env.clientID,
+        clientSecret: process.env.clientSecret,
+        callbackURL: `${process.env.callbackURL}`
+    },
+    function(accessToken, refreshToken, profile, cb) {
+        console.log("profile: " + profile);
+        cb();
+        //User.findOrCreate({ githubId: profile.id }, function (err, user) {
+        //  return cb(err, user);
+        //});
+    }
+));
+
+app.get('/auth/github', cors(), passport.authenticate('github'));
+app.get('/auth/github/callback', cors(),
+    passport.authenticate('github', { failureRedirect: '/login' }),
+    function(req, res) {
+        console.log("here");
+        // Successful authentication, redirect home.
+        res.redirect('/');
+    }
+);
+
 const MongoClient = require('mongodb').MongoClient;
-const uri = `mongodb+srv://${process.env.username}:${process.env.password}@cs4241-a3.catjb.gcp.mongodb.net/CS4241?retryWrites=true&w=majority`;
+const uri = `mongodb+srv://${process.env.name}:${process.env.password}@cs4241-a3.catjb.gcp.mongodb.net/CS4241?retryWrites=true&w=majority`;
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
 client.connect(err => {
     if(err){
@@ -234,7 +263,6 @@ const sendTable = function(response){
         "avgs": [],
     }
     getAllStats().then(function(result){
-            console.log("result: " +result);
             json["rows"] = result;
             json["totals"] = {
                 kills: totalKills,
